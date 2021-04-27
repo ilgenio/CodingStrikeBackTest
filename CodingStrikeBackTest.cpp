@@ -160,7 +160,7 @@ struct StateInfo
         inertiaAngle = player.speed.GetAngleBetween(lastMoveDir);        
     }
 
-    void SendAction(const Vec2& target, int thrust, bool boost)
+    void SendAction(const Vec2& target, int thrust, bool boost, bool shield)
     {
         if(boost)
         {
@@ -170,8 +170,6 @@ struct StateInfo
         }
         else
         {
-            cerr << "Correction with inertia angle " << inertiaAngle << endl;
-
             Vec2 targetDir = target-player.pos;
 
             if(abs(inertiaAngle) < 90)
@@ -181,7 +179,15 @@ struct StateInfo
 
             Vec2 corrected = player.pos+targetDir;
 
-            cout << corrected.x << " " << corrected.y << " " << thrust << endl;
+            if(shield)
+            {
+                cout << target.x << " " << target.y << " SHIELD" << endl;
+            }
+            else 
+            {
+                cout << corrected.x << " " << corrected.y << " " << thrust << endl;
+            }
+            
 
             thrust = thrust;
         }
@@ -210,35 +216,28 @@ bool ShouldTryCollide()
     // he is in front of my direction
     collide = collide && (state.checkPointPos-player.pos).Dot(boss.pos-player.pos) > 0;
     
-    //collide = collide && (state.checkPointPos-player.nextPos).Length() > CHECK_POINT_RADIUS*2;
-
-    if(collide)
-    {
-        cerr << "collide speeds " << bossSpeed << " " << playerSpeed << endl;
-        cerr << "collide distance " << (player.nextPos-boss.nextPos).Length() << " " << MIN_VEHICLE_DISTANCE << endl;
-    }
+    collide = collide && (state.checkPointPos-player.nextPos).Length() > CHECK_POINT_RADIUS*2;
 
     return collide;
 }
 
-void ComputeNextTarget(Vec2& target, bool& boost, int& thrust) 
+void ComputeNextTarget(Vec2& target, bool& boost, bool& shield, int& thrust) 
 {
     target = state.checkPointPos;
     boost = false;
+    shield = false;
         
-    // TODO: Si checkpoint angle crece menos thurst si decrece más thurst
-    
     if(state.checkPointAngle > 90 || state.checkPointAngle < -90)
     {
         cerr << "Too much angle thrust 0" << endl;
         thrust  = 0;
-    }
+    }    
     else if((target-player.nextPos).Length() < CHECK_POINT_RADIUS)
     {
         cerr << "Arriving checkpoint thrust 0" << endl;
 
         thrust = 0;
-    }
+    }    
     else if(ShouldTryCollide())  
     {
         if(!state.boostDone)
@@ -251,33 +250,13 @@ void ComputeNextTarget(Vec2& target, bool& boost, int& thrust)
         {
             cerr << "Will collide without boost " << player.pos << " " << boss.nextPos << endl;
             target = boss.nextPos;
-            thrust = 100;
+            shield = true;
+            //thrust = 100;
         }
     }
     else 
-    {   
-        
-        int angleTime = abs(state.angleSpeed) > 0 ? abs(state.checkPointAngle)/abs(state.angleSpeed) : std::numeric_limits<int>::max();
-
-        float speed = player.speed.Length();
+    {           
         float distance = (state.checkPointPos-player.pos).Length();
-        int linearTime = speed > 0.0f ? int(distance/speed) : std::numeric_limits<int>::max();
-
-        
-        cerr << "Times " << linearTime << " " << angleTime << endl;
-
-        // TODO: Use inertia angle
-
-        if(linearTime < angleTime && abs(state.checkPointAngle) > 5 && state.angleSpeed > 0)
-        {
-            cerr << "linear speed greater than angular thrust 0" << endl;
-            thrust = 0; // std::max(state.thrust-33, 0);
-        }    
-        else if(state.angleSpeed == 0 && abs(state.checkPointAngle) > 5)
-        {
-            cerr << "can't force angle to 0 thrust 0 " << state.angleSpeed << " " << state.checkPointAngle << endl;
-            thrust = 0; // std::max(state.thrust-10, 0);
-        }
         
         if(!state.boostDone &&  state.checkPointAngle == 0 && distance > 3000)
         {
@@ -288,13 +267,9 @@ void ComputeNextTarget(Vec2& target, bool& boost, int& thrust)
         {
             cerr << "acceleration " << endl;
             thrust = 100; 
+            shield = false; //(player.nextPos-boss.nextPos).Length() < VEHICLE_RADIUS*2;
         } 
     }
-
-    cerr << "Checkpoint angle " << state.checkPointAngle << endl;
-    cerr << "current speed " << player.speed.Length() << endl;
-    cerr << "boss speed " << boss.speed.Length() << endl;
-    cerr << (state.boostDone ? "boost done" : "boost not done") << endl;
 }
 
 int main()
@@ -325,9 +300,10 @@ int main()
         Vec2 target; 
         int thrust = 0;
         bool boost = false;   
+        bool shield = false;
 
-        ComputeNextTarget(target, boost, thrust);        
+        ComputeNextTarget(target, boost, shield, thrust);        
 
-        state.SendAction(target, thrust, boost);                
+        state.SendAction(target, thrust, boost, shield);                
     }
 }
